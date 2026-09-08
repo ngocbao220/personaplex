@@ -1,176 +1,183 @@
-# PersonaPlex: Voice and Role Control for Full Duplex Conversational Speech Models
+# PersonaPlex
 
 [![Weights](https://img.shields.io/badge/🤗-Weights-yellow)](https://huggingface.co/nvidia/personaplex-7b-v1)
 [![Paper](https://img.shields.io/badge/📄-Paper-blue)](https://arxiv.org/abs/2602.06053)
 [![Demo](https://img.shields.io/badge/🎮-Demo-green)](https://research.nvidia.com/labs/adlr/personaplex/)
-[![Discord](https://img.shields.io/badge/Discord-Join-purple?logo=discord)](https://discord.gg/5jAXrrbwRb)
 
-PersonaPlex is a real-time, full-duplex speech-to-speech conversational model that enables persona control through text-based role prompts and audio-based voice conditioning. Trained on a combination of synthetic and real conversations, it produces natural, low-latency spoken interactions with a consistent persona. PersonaPlex is based on the [Moshi](https://arxiv.org/abs/2410.00037) architecture and weights.
+PersonaPlex is a real-time, full-duplex speech-to-speech model with text-based role control and audio-based voice conditioning. It is based on [Moshi](https://arxiv.org/abs/2410.00037) and provides:
+
+- a WebSocket server and browser client for live conversations;
+- offline WAV-to-WAV inference; and
+- a reproducible, single-process fine-tuning workflow for reviewed two-speaker stereo conversations.
 
 <p align="center">
-  <img src="assets/architecture_diagram.png" alt="PersonaPlex Model Architecture">
-  <br>
-  <em>PersonaPlex Architecture</em>
+  <img src="assets/architecture_diagram.png" alt="PersonaPlex architecture">
 </p>
 
-## Usage
+## How it works
 
-### Prerequisites
+At every 12.5 Hz frame, PersonaPlex consumes three streams: user audio, agent text, and agent audio. Mimi encodes each audio stream into eight codebooks. The model generates the agent text and audio streams while receiving user audio, so it can listen while speaking and react to interruption or overlap.
 
-Install the [Opus audio codec](https://github.com/xiph/opus) development library:
+PersonaPlex conditions a conversation with a hybrid system prompt:
+
+1. An agent voice sample establishes the output voice.
+2. A text prompt establishes the agent's role.
+
+The released checkpoint is `nvidia/personaplex-7b-v1`. Accept its model license before downloading it.
+
+## Quick start: inference
+
+### Requirements
+
+- Python 3.10 or later
+- [Opus development headers](https://github.com/xiph/opus)
+- A Hugging Face token with access to the model
+
+On Ubuntu or Debian:
+
 ```bash
-# Ubuntu/Debian
 sudo apt install libopus-dev
-
-# Fedora/RHEL
-sudo dnf install opus-devel
+python -m pip install --force-reinstall ./moshi
+export HF_TOKEN=<your_hugging_face_token>
 ```
 
-### Installation
+For Blackwell GPUs, install a CUDA 13 PyTorch build as described in [NVIDIA/personaplex#2](https://github.com/NVIDIA/personaplex/issues/2).
 
-Download this repository and install with:
+The forced local install is intentional: the training workflow needs this checkout's `LMModel.forward_train`, which is not present in every separately installed `moshi` package.
+
+### Run the live server
+
 ```bash
-pip install moshi/.
+SSL_DIR=$(mktemp -d)
+python -m moshi.server --ssl "$SSL_DIR"
 ```
 
-Extra step for Blackwell based GPUs as suggested in (See https://github.com/NVIDIA/personaplex/issues/2):
+Open `https://localhost:8998`. If GPU memory is insufficient, install `accelerate` and add `--cpu-offload`:
+
 ```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
+python -m pip install accelerate
+SSL_DIR=$(mktemp -d)
+python -m moshi.server --ssl "$SSL_DIR" --cpu-offload
 ```
 
+### Run offline inference
 
-### Accept Model License
-Log in to your Huggingface account and accept the PersonaPlex model license [here](https://huggingface.co/nvidia/personaplex-7b-v1). <br>
-Then set up your Huggingface authentication:
+This writes generated agent audio with the same duration as the input user WAV, plus decoded agent text tokens.
+
 ```bash
-export HF_TOKEN=<YOUR_HUGGINGFACE_TOKEN>
-```
-
-### Launch Server
-
-Launch server for live interaction (temporary SSL certs for https):
-```bash
-SSL_DIR=$(mktemp -d); python -m moshi.server --ssl "$SSL_DIR"
-```
-
-**CPU Offload:** If your GPU has insufficient memory, use the `--cpu-offload` flag to offload model layers to CPU. This requires the `accelerate` package (`pip install accelerate`):
-```bash
-SSL_DIR=$(mktemp -d); python -m moshi.server --ssl "$SSL_DIR" --cpu-offload
-```
-
-Access the Web UI from a browser at `localhost:8998` if running locally, otherwise look for the access link printed by the script:
-```
-Access the Web UI directly at https://11.54.401.33:8998
-```
-
-### Offline Evaluation
-
-For offline evaluation use the offline script that streams in an input wav file and produces an output wav file from the captured output stream. The output file will be the same duration as the input file.
-
-Add `--cpu-offload` to any command below if your GPU has insufficient memory (requires `accelerate` package). Or install cpu-only PyTorch for offline evaluation on pure CPU.
-
-**Assistant example:**
-```bash
-HF_TOKEN=<TOKEN> \
 python -m moshi.offline \
-  --voice-prompt "NATF2.pt" \
-  --input-wav "assets/test/input_assistant.wav" \
+  --voice-prompt NATF2.pt \
+  --input-wav assets/test/input_assistant.wav \
   --seed 42424242 \
-  --output-wav "output.wav" \
-  --output-text "output.json"
+  --output-wav output.wav \
+  --output-text output.json
 ```
 
-**Service example:**
+Use `--text-prompt` to set a role. If `--voice-prompt-dir` is omitted, the bundled voices are retrieved from the model repository.
+
+## Fine-tune from reviewed stereo data
+
+The `training` package is separate from inference. It starts from a compatible PersonaPlex checkpoint, keeps Mimi and the tokenizer fixed, and produces a `model.safetensors` file that the existing server and offline commands can load through `--moshi-weight`.
+
+### Dataset contract
+
+Input is JSONL. Relative asset paths are resolved from the manifest directory. Every record must include:
+
+- exactly one two-channel conversation WAV, with one synchronized speaker per channel;
+- distinct `speaker_ids`, a `train`, `validation`, or `test` split, and a stable `split_group`;
+- timestamped transcript segments for both channels;
+- an approved, versioned role prompt and a non-overlapping voice-prompt clip for each speaker.
+
+A speaker cannot appear in more than one split. The validator rejects malformed timestamps, missing prompt clips, cross-split speaker leakage, and prompts that overlap their own dialogue transcript.
+
+```json
+{
+  "id": "call-001",
+  "stereo_wav": "audio/call-001.wav",
+  "speaker_ids": ["speaker-a", "speaker-b"],
+  "split_group": "call-001",
+  "split": "train",
+  "language": "en",
+  "approved_role_prompts": [
+    "You are a support agent.",
+    "You are a customer."
+  ],
+  "role_prompt_provenance": [
+    {"status": "approved", "version": "roles-v1"},
+    {"status": "approved", "version": "roles-v1"}
+  ],
+  "transcripts": [
+    [{"start": 0.0, "end": 0.4, "text": "Hello."}],
+    [{"start": 0.5, "end": 0.9, "text": "Hi."}]
+  ],
+  "voice_prompts": [
+    {"path": "prompts/speaker-a.wav", "start": 0.0, "end": 3.0},
+    {"path": "prompts/speaker-b.wav", "start": 0.0, "end": 3.0}
+  ]
+}
+```
+
+### Prepare, train, and evaluate
+
+Run all commands from the repository root after installing `./moshi`.
+
 ```bash
-HF_TOKEN=<TOKEN> \
-python -m moshi.offline \
-  --voice-prompt "NATM1.pt" \
-  --text-prompt "$(cat assets/test/prompt_service.txt)" \
-  --input-wav "assets/test/input_service.wav" \
-  --seed 42424242 \
-  --output-wav "output.wav" \
-  --output-text "output.json"
+python -m training validate --manifest data/manifest.jsonl
+
+python -m training prepare \
+  --manifest data/manifest.jsonl \
+  --output-dir prepared/run-001 \
+  --mimi-weight /models/tokenizer-e351c8d8-checkpoint125.safetensors \
+  --tokenizer /models/tokenizer_spm_32k_3.model
+
+python -m training train \
+  --prepared-index prepared/run-001/index.jsonl \
+  --moshi-weight /models/model.safetensors \
+  --output-dir training-runs/run-001 \
+  --steps 1000
+
+python -m training evaluate \
+  --prepared-index prepared/run-001/index.jsonl \
+  --moshi-weight training-runs/run-001/model.safetensors \
+  --output training-runs/run-001/validation.json
 ```
 
-## Voices
+`prepare` creates both directions of each conversation: A→B and B→A. In either direction, only the selected agent text and agent audio are supervised. User audio is teacher-forced conditioning; the hybrid system prompt is also excluded from loss. The objective weights semantic agent audio at `1.0`, non-semantic agent codebooks at `0.02`, and padded agent text at `0.3`.
 
-PersonaPlex supports a wide range of voices; we pre-package embeddings for voices that sound more natural and conversational (NAT) and others that are more varied (VAR). The fixed set of voices are labeled:
-```
-Natural(female): NATF0, NATF1, NATF2, NATF3
-Natural(male):   NATM0, NATM1, NATM2, NATM3
-Variety(female): VARF0, VARF1, VARF2, VARF3, VARF4
-Variety(male):   VARM0, VARM1, VARM2, VARM3, VARM4
-```
+Prepared shards, checkpoints, training state, and metrics are written under the supplied output directories. `prepared/` and `training-runs/` are ignored by Git. `training-state.pt` is only for resuming a trusted local run; distribute `model.safetensors` for inference.
 
-## Prompting Guide
+### Current training scope
 
-The model is trained on synthetic conversations for a fixed assistant role and varying customer service roles.
+The included trainer is intentionally a bounded, single-process recipe. It supports resumable training, maximum sequence lengths, held-out teacher-forced loss, and compatible checkpoint export. It does not configure DDP, FSDP, dataset download, automatic role-prompt generation, or human role-adherence evaluation; those remain external infrastructure and review responsibilities.
 
-### Assistant Role
+## Repository layout
 
-The assistant role has the prompt:
-```
-You are a wise and friendly teacher. Answer questions or provide advice in a clear and engaging way.
-```
+| Path | Purpose |
+| --- | --- |
+| `moshi/` | PersonaPlex model, Mimi codec, server, and offline inference |
+| `client/` | Browser client |
+| `training/` | Manifest validation, preparation, training, and evaluation CLI |
+| `tests/` | Training-contract and local-model integration tests |
 
-Use this prompt for the QA assistant focused "User Interruption" evaluation category in [FullDuplexBench](https://arxiv.org/abs/2503.04721).
+## Verification
 
-### Customer Service Roles
-
-The customer service roles support a variety of prompts. Here are some examples for prompting style reference:
-```
-You work for CitySan Services which is a waste management and your name is Ayelen Lucero. Information: Verify customer name Omar Torres. Current schedule: every other week. Upcoming pickup: April 12th. Compost bin service available for $8/month add-on.
-```
-```
-You work for Jerusalem Shakshuka which is a restaurant and your name is Owen Foster. Information: There are two shakshuka options: Classic (poached eggs, $9.50) and Spicy (scrambled eggs with jalapenos, $10.25). Sides include warm pita ($2.50) and Israeli salad ($3). No combo offers. Available for drive-through until 9 PM.
-```
-```
-You work for AeroRentals Pro which is a drone rental company and your name is Tomaz Novak. Information: AeroRentals Pro has the following availability: PhoenixDrone X ($65/4 hours, $110/8 hours), and the premium SpectraDrone 9 ($95/4 hours, $160/8 hours). Deposit required: $150 for standard models, $300 for premium.
+```bash
+python -m unittest discover -s tests -v
+python -m py_compile training/*.py
 ```
 
-### Casual Conversations
-
-The model is also trained on real conversations from the [Fisher English Corpus](https://catalog.ldc.upenn.edu/LDC2004T19) with LLM-labeled prompts for open-ended conversations. Here are some example prompts for casual conversations:
-```
-You enjoy having a good conversation.
-```
-```
-You enjoy having a good conversation. Have a casual discussion about eating at home versus dining out.
-```
-```
-You enjoy having a good conversation. Have an empathetic discussion about the meaning of family amid uncertainty.
-```
-```
-You enjoy having a good conversation. Have a reflective conversation about career changes and feeling of home. You have lived in California for 21 years and consider San Francisco your home. You work as a teacher and have traveled a lot. You dislike meetings.
-```
-```
-You enjoy having a good conversation. Have a casual conversation about favorite foods and cooking experiences. You are David Green, a former baker now living in Boston. You enjoy cooking diverse international dishes and appreciate many ethnic restaurants.
-```
-
-Use the prompt `You enjoy having a good conversation.` for the "Pause Handling", "Backchannel" and "Smooth Turn Taking" evaluation categories of FullDuplexBench.
-
-## Generalization
-
-Personaplex finetunes Moshi and benefits from the generalization capabilities of the underlying [Helium](https://kyutai.org/blog/2025-04-30-helium) LLM. Thanks to the broad training corpus of the backbone, we find that the model will respond plausibly to out-of-distribution prompts and lead to unexpected or fun conversations. We encourage experimentation with different prompts to test the model's emergent ability to handle scenarios outside its training distribution. As an inspiration we feature the following astronaut prompt in the WebUI:
-```
-You enjoy having a good conversation. Have a technical discussion about fixing a reactor core on a spaceship to Mars. You are an astronaut on a Mars mission. Your name is Alex. You are already dealing with a reactor core meltdown on a Mars mission. Several ship systems are failing, and continued instability will lead to catastrophic failure. You explain what is happening and you urgently ask for help thinking through how to stabilize the reactor.
-```
-
-## License
-
-The present code is provided under the MIT license. The weights for the models are released under the NVIDIA Open Model license.
+The model license governs released weights. Repository code is MIT licensed.
 
 ## Citation
 
-If you use PersonaPlex in your research, please cite our paper:
 ```bibtex
 @misc{roy2026personaplexvoicerolecontrol,
-      title={PersonaPlex: Voice and Role Control for Full Duplex Conversational Speech Models}, 
-      author={Rajarshi Roy and Jonathan Raiman and Sang-gil Lee and Teodor-Dumitru Ene and Robert Kirby and Sungwon Kim and Jaehyeon Kim and Bryan Catanzaro},
-      year={2026},
-      eprint={2602.06053},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL},
-      url={https://arxiv.org/abs/2602.06053}, 
+  title={PersonaPlex: Voice and Role Control for Full Duplex Conversational Speech Models},
+  author={Rajarshi Roy and Jonathan Raiman and Sang-gil Lee and Teodor-Dumitru Ene and Robert Kirby and Sungwon Kim and Jaehyeon Kim and Bryan Catanzaro},
+  year={2026},
+  eprint={2602.06053},
+  archivePrefix={arXiv},
+  primaryClass={cs.CL},
+  url={https://arxiv.org/abs/2602.06053}
 }
 ```
