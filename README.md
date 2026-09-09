@@ -121,6 +121,21 @@ A speaker cannot appear in more than one split. The validator rejects malformed 
 
 Run all commands from the repository root after installing `./moshi`.
 
+To prepare a bounded OtoSpeech subset, choose an intentional limit. The command first lists the dataset, then downloads only the five required files for the first `N` complete conversations; it does not use wildcard patterns that would download every matching audio file. The output directory must be new or empty.
+
+```bash
+python -m training otospeech \
+  --output-dir data/otospeech-20 \
+  --max-samples 20 \
+  --speaker-1-role-prompt "You are a caller." \
+  --speaker-2-role-prompt "You are a responder." \
+  --role-prompt-version roles-reviewed-v1
+
+python -m training validate --manifest data/otospeech-20/manifest.jsonl
+```
+
+This creates synchronized stereo WAVs (channel 0 = `speaker_1`, channel 1 = `speaker_2`), SRT-derived transcripts, three-second voice prompts, and `manifest.jsonl`. The two role prompts and their version are required because they must be reviewed before entering the training manifest. A small `--max-samples` run proves the data path only, not meaningful fine-tuning.
+
 ```bash
 python -m training validate --manifest data/manifest.jsonl
 

@@ -181,6 +181,7 @@ timings.json
 mlx-trace.json
 prepared/
 training-runs/
+data/otospeech-*/
 
 # Include everything in assets
 !assets/
