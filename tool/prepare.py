@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import subprocess
 import struct
 import wave
 from dataclasses import dataclass
@@ -168,6 +169,37 @@ def _default_transcriber(model_name: str) -> Transcriber:
     return transcribe
 
 
+def normalize_directory(source_dir: Path, output_dir: Path) -> int:
+    """Convert source WAV files to the strict 16 kHz PCM input contract.
+
+    Direct child WAVs are preferred. If none exist, nested WAVs are used as a
+    compatibility fallback for archive layouts such as ``otospeech/1/*.wav``.
+    """
+    if not source_dir.is_dir():
+        raise NotADirectoryError(f"Source directory does not exist: {source_dir}")
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise FileExistsError(f"Output directory is not empty: {output_dir}")
+    sources = sorted(path for path in source_dir.glob("*.wav") if path.is_file())
+    if not sources:
+        sources = sorted(path for path in source_dir.rglob("*.wav") if path.is_file())
+    if not sources:
+        raise ValueError(f"No WAV files found in {source_dir}")
+    names = [path.name for path in sources]
+    if len(names) != len(set(names)):
+        raise ValueError("Nested source WAVs must have unique filenames.")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for source in sources:
+        subprocess.run(
+            [
+                "ffmpeg", "-nostdin", "-v", "error", "-i", str(source),
+                "-map", "0:a:0", "-ac", "2", "-ar", str(INPUT_SAMPLE_RATE),
+                "-c:a", "pcm_s16le", str(output_dir / source.name),
+            ],
+            check=True,
+        )
+    return len(sources)
+
+
 def prepare_directory(raw_dir: Path, output_dir: Path, *, roles_path: Path, role_prompt_version: str, language: str = "auto", voice_prompt_seconds: float = 3.0, split: str = "train", max_samples: int | None = None, transcribe: Transcriber | None = None) -> PreparationResult:
     """Prepare a directory of stereo WAV files, preserving their duplex timeline."""
     if language not in {"auto", "en", "vi"}:
@@ -243,7 +275,14 @@ def main() -> None:
     prepare.add_argument("--voice-prompt-seconds", type=float, default=3.0)
     prepare.add_argument("--split", default="train")
     prepare.add_argument("--max-samples", type=int)
+    normalize = subcommands.add_parser("normalize-audio", help="convert source WAVs to stereo PCM16 at 16 kHz")
+    normalize.add_argument("source_dir", type=Path)
+    normalize.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "normalize-audio":
+        count = normalize_directory(args.source_dir, args.output_dir)
+        print(f"Normalized {count} WAV files: {args.output_dir}")
+        return
     if args.command == "prepare":
         transcriber: Transcriber | None = None
         # Delay model allocation until the first valid, reviewed sample.

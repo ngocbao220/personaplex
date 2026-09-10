@@ -12,6 +12,18 @@ data-preparation run is never mistaken for a training run.
 The available command accepts one stereo WAV conversation per sample and emits
 reviewable artifacts for a future trainer:
 
+If a source dataset stores float or 48 kHz WAVs (for example, a flat Kaggle
+layout `otospeech/stereo_1.wav`), normalize it first. The command prefers WAVs
+directly inside the source directory and falls back to nested WAVs when no
+direct files exist:
+
+```bash
+python -m tool normalize-audio otospeech --output-dir data/raw
+```
+
+This requires `ffmpeg` and writes stereo PCM16 at 16 kHz. The output directory
+must be new or empty.
+
 ```bash
 pip install whisper-timestamped
 

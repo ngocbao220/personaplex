@@ -3,8 +3,9 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+from unittest.mock import patch
 
-from tool.prepare import prepare_directory
+from tool.prepare import normalize_directory, prepare_directory
 
 
 def write_wav(path: Path, *, channels: int, sample_rate: int = 16_000, frames: int = 16_000):
@@ -140,3 +141,18 @@ class PrepareDirectoryTest(unittest.TestCase):
         self.assertEqual((result.prepared, result.rejected), (0, 1))
         rejection = json.loads((self.output / "rejected.jsonl").read_text())
         self.assertIn("16 kHz", rejection["error"])
+
+    @patch("tool.prepare.subprocess.run")
+    def test_normalize_accepts_flat_otospeech_layout(self, run):
+        source = self.root / "otospeech"
+        source.mkdir()
+        (source / "stereo_1.wav").write_bytes(b"source")
+
+        result = normalize_directory(source, self.root / "raw")
+
+        self.assertEqual(result, 1)
+        command = run.call_args.args[0]
+        self.assertIn(str(source / "stereo_1.wav"), command)
+        self.assertIn(str(self.root / "raw" / "stereo_1.wav"), command)
+        self.assertIn("16000", command)
+        self.assertIn("pcm_s16le", command)
