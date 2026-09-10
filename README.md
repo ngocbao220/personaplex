@@ -165,8 +165,8 @@ model, create Mimi tokens, or modify model weights.
 Each input recording is one 16 kHz, uncompressed, 16-bit stereo PCM WAV in `data/raw/`.
 Channel 0 is speaker A and channel 1 is speaker B for the *entire* recording.
 Keep the complete shared timeline: silence, overlap, backchannels, and
-interruptions must not be cut or mixed down. The tool resamples its copies to
-24 kHz, which is the Mimi sample rate used by PersonaPlex.
+interruptions must not be cut or mixed down. Preparation preserves the 16 kHz
+audio; the future training path is responsible for resampling to Mimi's 24 kHz.
 
 Role prompts are deliberately separate from audio. Create one JSON object per
 WAV stem in `data/roles.jsonl`; both prompts must have been human-approved:

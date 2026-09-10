@@ -45,8 +45,8 @@ class PrepareDirectoryTest(unittest.TestCase):
         )
 
         def asr(channel_wav, sample_rate, language):
-            self.assertEqual(sample_rate, 24_000)
-            self.assertEqual(len(channel_wav), 48_000)
+            self.assertEqual(sample_rate, 16_000)
+            self.assertEqual(len(channel_wav), 32_000)
             return [{"text": "hello", "start": 0.0, "end": 0.5}]
 
         result = prepare_directory(
@@ -68,9 +68,9 @@ class PrepareDirectoryTest(unittest.TestCase):
         self.assertEqual(len(manifest["transcripts"]), 2)
         self.assertEqual(len(manifest["voice_prompts"]), 2)
         with wave.open(str(self.output / manifest["stereo_wav"]), "rb") as audio:
-            self.assertEqual((audio.getnchannels(), audio.getframerate(), audio.getnframes()), (2, 24_000, 24_000))
+            self.assertEqual((audio.getnchannels(), audio.getframerate(), audio.getnframes()), (2, 16_000, 16_000))
         with wave.open(str(self.output / manifest["voice_prompts"][0]["wav"]), "rb") as prompt:
-            self.assertEqual((prompt.getnchannels(), prompt.getframerate(), prompt.getnframes()), (1, 24_000, 12_000))
+            self.assertEqual((prompt.getnchannels(), prompt.getframerate(), prompt.getnframes()), (1, 16_000, 8_000))
         transcript = json.loads((self.output / manifest["transcripts"][1]["json"]).read_text())
         self.assertEqual(transcript["speaker_id"], "user-b")
         self.assertEqual(transcript["segments"][0]["text"], "hello")

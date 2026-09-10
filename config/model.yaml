@@ -9,4 +9,4 @@ model:
 
 audio:
   input_sample_rate: 16000
-  sample_rate: 24000
+  mimi_sample_rate: 24000

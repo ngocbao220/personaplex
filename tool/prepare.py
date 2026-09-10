@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 
-TARGET_SAMPLE_RATE = 24_000
 INPUT_SAMPLE_RATE = 16_000
 Transcript = list[dict[str, object]]
 Transcriber = Callable[[bytes, int, str], Transcript]
@@ -89,26 +88,6 @@ def _read_stereo_wav(path: Path) -> tuple[bytes, int, int, int]:
     if sample_rate < 1 or frames < 1:
         raise ValueError("WAV input must contain audio frames.")
     return pcm, sample_rate, channels, frames
-
-
-def _resample_stereo_16bit(pcm: bytes, source_rate: int) -> bytes:
-    """Linearly resample interleaved stereo PCM without a runtime audio dependency."""
-    if source_rate == TARGET_SAMPLE_RATE:
-        return pcm
-    frame_count = len(pcm) // 4
-    output_frames = round(frame_count * TARGET_SAMPLE_RATE / source_rate)
-    source = memoryview(pcm).cast("h")
-    output = bytearray(output_frames * 4)
-    for index in range(output_frames):
-        position = index * source_rate / TARGET_SAMPLE_RATE
-        left = int(position)
-        right = min(left + 1, frame_count - 1)
-        fraction = position - left
-        for channel in range(2):
-            start = source[left * 2 + channel]
-            end = source[right * 2 + channel]
-            struct.pack_into("<h", output, (index * 2 + channel) * 2, round(start + (end - start) * fraction))
-    return bytes(output)
 
 
 def _channel_pcm(stereo_pcm: bytes, channel: int) -> bytes:
@@ -232,24 +211,24 @@ def prepare_directory(raw_dir: Path, output_dir: Path, *, roles_path: Path, role
                     raise ValueError(f"No role metadata for id '{sample_id}'.")
                 speaker_ids, role_prompts = _validated_roles(metadata)
                 pcm, source_rate, _, _ = _read_stereo_wav(source)
-                stereo_pcm = _resample_stereo_16bit(pcm, source_rate)
+                stereo_pcm = pcm
                 frame_count = len(stereo_pcm) // 4
-                duration = frame_count / TARGET_SAMPLE_RATE
-                prompt_frames = min(round(voice_prompt_seconds * TARGET_SAMPLE_RATE), frame_count)
+                duration = frame_count / INPUT_SAMPLE_RATE
+                prompt_frames = min(round(voice_prompt_seconds * INPUT_SAMPLE_RATE), frame_count)
                 if prompt_frames < 1:
                     raise ValueError("Voice prompt would be empty.")
                 if transcriber is None:
                     transcriber = _default_transcriber("large-v3")
                 channels = [_channel_pcm(stereo_pcm, index) for index in range(2)]
-                transcripts = [_validate_transcript(transcriber(channel, TARGET_SAMPLE_RATE, language), duration) for channel in channels]
+                transcripts = [_validate_transcript(transcriber(channel, INPUT_SAMPLE_RATE, language), duration) for channel in channels]
                 stereo_path = Path("audio") / f"{sample_id}.wav"
                 transcript_paths = [Path("transcripts") / f"{sample_id}-speaker-{index + 1}.json" for index in range(2)]
                 prompt_paths = [Path("prompts") / f"{sample_id}-speaker-{index + 1}.wav" for index in range(2)]
-                _write_wav(output_dir / stereo_path, stereo_pcm, TARGET_SAMPLE_RATE, 2)
+                _write_wav(output_dir / stereo_path, stereo_pcm, INPUT_SAMPLE_RATE, 2)
                 for index in range(2):
                     (output_dir / transcript_paths[index]).parent.mkdir(parents=True, exist_ok=True)
                     (output_dir / transcript_paths[index]).write_text(json.dumps({"speaker_id": speaker_ids[index], "language": language, "segments": transcripts[index]}, ensure_ascii=False) + "\n", encoding="utf-8")
-                    _write_wav(output_dir / prompt_paths[index], channels[index][: prompt_frames * 2], TARGET_SAMPLE_RATE, 1)
+                    _write_wav(output_dir / prompt_paths[index], channels[index][: prompt_frames * 2], INPUT_SAMPLE_RATE, 1)
                 row = {"id": sample_id, "stereo_wav": str(stereo_path), "speaker_ids": speaker_ids, "split_group": sample_id, "split": split, "language": language, "approved_role_prompts": role_prompts, "role_prompt_provenance": role_prompt_version, "transcripts": [{"speaker_id": speaker_ids[index], "json": str(transcript_paths[index])} for index in range(2)], "voice_prompts": [{"speaker_id": speaker_ids[index], "wav": str(prompt_paths[index])} for index in range(2)]}
                 manifest.write(json.dumps(row, ensure_ascii=False) + "\n")
                 review.write(json.dumps({"id": sample_id, "status": "accepted", "duration_sec": duration, "transcripts": row["transcripts"]}, ensure_ascii=False) + "\n")

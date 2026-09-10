@@ -31,7 +31,7 @@ python -m tool prepare data/raw \
   --output-dir data/prepared-manifest \
   --roles data/roles.jsonl \
   --role-prompt-version roles-v1 \
-  --asr-model large-v3 \
+  --asr-model small \
   --language auto \
   --voice-prompt-seconds 3 \
   --split train \
@@ -69,7 +69,7 @@ writes:
 
 ```text
 data/prepared-manifest/
-├── audio/<id>.wav                         # stereo, normalized to 24 kHz
+├── audio/<id>.wav                         # stereo PCM16 at 16 kHz
 ├── transcripts/<id>-speaker-{1,2}.json    # timestamped channel ASR
 ├── prompts/<id>-speaker-{1,2}.wav         # independent mono voice prompts
 ├── manifest.jsonl                         # accepted samples only
