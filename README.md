@@ -156,6 +156,60 @@ Personaplex finetunes Moshi and benefits from the generalization capabilities of
 You enjoy having a good conversation. Have a technical discussion about fixing a reactor core on a spaceship to Mars. You are an astronaut on a Mars mission. Your name is Alex. You are already dealing with a reactor core meltdown on a Mars mission. Several ship systems are failing, and continued instability will lead to catastrophic failure. You explain what is happening and you urgently ask for help thinking through how to stabilize the reactor.
 ```
 
+## Prepare stereo conversation data
+
+`tool prepare` converts reviewed stereo WAV conversations into an inspectable
+manifest for a future PersonaPlex fine-tuning pipeline. It does not fine-tune a
+model, create Mimi tokens, or modify model weights.
+
+Each input recording is one 16 kHz, uncompressed, 16-bit stereo PCM WAV in `data/raw/`.
+Channel 0 is speaker A and channel 1 is speaker B for the *entire* recording.
+Keep the complete shared timeline: silence, overlap, backchannels, and
+interruptions must not be cut or mixed down. The tool resamples its copies to
+24 kHz, which is the Mimi sample rate used by PersonaPlex.
+
+Role prompts are deliberately separate from audio. Create one JSON object per
+WAV stem in `data/roles.jsonl`; both prompts must have been human-approved:
+
+```json
+{"id":"call-001","speaker_ids":["agent-a","user-b"],"role_prompts":[{"text":"You are a helpful support agent.","status":"approved"},{"text":"You are a customer seeking support.","status":"approved"}]}
+```
+
+`speaker_ids[0]` and the first prompt describe channel 0; index 1 describes
+channel 1. IDs must be distinct. Do not infer roles from the audio or reuse an
+unreviewed prompt. In a future trainer either speaker may be the model agent;
+these two reviewed role/voice pairs preserve the information required to build
+those directions.
+
+Install the optional ASR dependency once in the environment that runs
+preparation:
+
+```bash
+pip install whisper-timestamped
+```
+
+Then run preparation. `--language auto` lets Whisper detect English or
+Vietnamese; use `en` or `vi` when the language is known. Start with a bounded
+sample during development using `--max-samples`.
+
+```bash
+python -m tool prepare data/raw \
+  --output-dir data/prepared-manifest \
+  --roles data/roles.jsonl \
+  --role-prompt-version roles-v1 \
+  --asr-model large-v3 \
+  --language auto \
+  --voice-prompt-seconds 3 \
+  --split train \
+  --max-samples 5
+```
+
+The output directory must be new or empty. Successful samples appear in
+`manifest.jsonl`, with normalized `audio/`, one timestamped transcript JSON per
+channel in `transcripts/`, and one independent voice prompt WAV per channel in
+`prompts/`. Check `review.jsonl` before using the manifest. Invalid samples are
+kept out of the manifest and recorded with their reason in `rejected.jsonl`.
+
 ## License
 
 The present code is provided under the MIT license. The weights for the models are released under the NVIDIA Open Model license.

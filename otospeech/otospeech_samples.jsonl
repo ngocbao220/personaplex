@@ -1,0 +1,10 @@
+{"folder": 1, "task_id": "1", "files": ["stereo_1.wav", "metadata_1.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 2, "task_id": "10", "files": ["stereo_2.wav", "metadata_2.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 3, "task_id": "100", "files": ["stereo_3.wav", "metadata_3.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 4, "task_id": "101", "files": ["stereo_4.wav", "metadata_4.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 5, "task_id": "102", "files": ["stereo_5.wav", "metadata_5.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 6, "task_id": "103", "files": ["stereo_6.wav", "metadata_6.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 7, "task_id": "104", "files": ["stereo_7.wav", "metadata_7.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 8, "task_id": "105", "files": ["stereo_8.wav", "metadata_8.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 9, "task_id": "106", "files": ["stereo_9.wav", "metadata_9.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}
+{"folder": 10, "task_id": "107", "files": ["stereo_10.wav", "metadata_10.json"], "dataset": "otoearth/otoSpeech-full-duplex-turn-104h", "revision": "46f520297f434edf804389f82f9075a59d2f8268"}

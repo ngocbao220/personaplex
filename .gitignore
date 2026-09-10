@@ -173,6 +173,8 @@ pkg
 *.tgz
 *.mp3
 *.ogg
+/models/
+/data/prepared-manifest/
 /moshi-demo/config.sh
 log.*
 laurent/cuda-test/check
@@ -183,3 +185,5 @@ mlx-trace.json
 # Include everything in assets
 !assets/
 !assets/**
+
+.DS_Store

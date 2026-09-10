@@ -1,0 +1,12 @@
+# Reserved model configuration for the future PersonaPlex fine-tuning command.
+# It is not consumed by `python -m tool prepare`.
+
+model:
+  id: nvidia/personaplex-7b-v1
+  checkpoint: models/personaplex-7b-v1/model.safetensors
+  tokenizer: models/personaplex-7b-v1/tokenizer_spm_32k_3.model
+  mimi_weight: models/personaplex-7b-v1/tokenizer-e351c8d8-checkpoint125.safetensors
+
+audio:
+  input_sample_rate: 16000
+  sample_rate: 24000
